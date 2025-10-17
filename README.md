@@ -38,5 +38,5 @@
 ## 编译
 
 ```bash
-pyinstaller --onefile client.py
+pyinstaller --onefile --clean client.py
 ```
