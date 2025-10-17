@@ -1,0 +1,13 @@
+[Unit]
+Description=Change Monitor client
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/opt/ChangeMonitor
+ExecStart=/usr/bin/bash client.sh
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

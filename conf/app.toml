@@ -1,0 +1,33 @@
+[app]
+name = 'Change Monitor' # 程序名
+version = 'v0.0.1'      # 程序版本
+
+[monitor]
+host = '127.0.0.1' # 服务监听地址
+port = 1500        # 服务监听端口
+rule = '/upload'   # 文件接收地址
+[monitor.server]
+path = 'uploads' # 上传文件保存路径
+allow = ['xml']  # 允许上传的文件类型
+[monitor.client]
+watch = 'cache'   # 监控目标路径
+allow = '.xml'    # 监控目标类型
+recursive = false # 是否递归
+min_size = 0.01   # 允许上传文件的最小 MB
+max_size = 10     # 允许上传文件的最大 MB
+interval = 1.0    # 等待监控目标更新（单位：秒）
+delay = 1.0       # 等待文件完成（单位：秒）
+ttl = 300         # 文件过期时间（单位：秒）
+
+[heartbeat]
+interval = 3600       # 心跳间隔（单位：秒）
+with_timestamp = true # 是否在心跳信息中包含时间戳
+to_transmitter = true # 是否将心跳信息发往数据传输器
+
+[logger]
+to_console = true
+console_level = 'INFO'
+to_file = true
+file_level = ['INFO', 'WARNING', 'ERROR']
+backup_count = 30
+format = '%(asctime)s | %(levelname)-8s | <%(threadName)s> %(module)s.%(funcName)s [%(lineno)d]: %(message)s'
