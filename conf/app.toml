@@ -20,7 +20,7 @@ delay = 1.0       # 等待文件完成（单位：秒）
 ttl = 300         # 文件过期时间（单位：秒）
 
 [heartbeat]
-interval = 3600       # 心跳间隔（单位：秒）
+interval = 600        # 心跳间隔（单位：秒）
 with_timestamp = true # 是否在心跳信息中包含时间戳
 to_transmitter = true # 是否将心跳信息发往数据传输器
 
