@@ -10,6 +10,7 @@ Description: 文件变化监视器 -- 作为 DataFoundation 外挂程序的 Clie
 """
 
 import hashlib
+import json
 import os
 from pathlib import Path
 import sys
@@ -137,13 +138,15 @@ class Monitor(FileSystemEventHandler):
                     resp = requests.post(self.url, files=files, timeout=10)
 
                 status = resp.status_code
+                text = json.loads(resp.text)
                 if status == 200:
                     self.logger.info(
                         "File '{}' uploaded success".format(filename))
                     _uploaded_cache[filepath] = (file_hash, now)
                 else:
-                    self.logger.error("File '{}' uploaded failed: {}".format(
-                        filename, status))
+                    self.logger.error(
+                        "File '{}' uploaded failed: {} - {}".format(
+                            filename, status, text.get('error')))
             except Exception as e:
                 self.logger.error("File '{}' uploaded exception: {}".format(
                     filename, e))
@@ -194,12 +197,12 @@ def main(config):
         while True:
             time.sleep(interval)
     except KeyboardInterrupt:
-        logger.info('Received interrupt signal, stop {}'.format(name))
+        logger.info('Received interrupt signal, stoping {}'.format(name))
     finally:
         observer.stop()
         observer.join()
         heartbeat_thread.join(timeout=2)
-        logger.info('{} has exited'.format(name))
+        logger.info('Bye')
 
 
 if __name__ == "__main__":
