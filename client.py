@@ -43,10 +43,10 @@ class Monitor(FileSystemEventHandler):
         port = config.get('port', 1500)
         rule = config.get('rule', '/upload')
         self.allowed = config.get('allowed', [])
+        self.min_size = config.get('min_size', 0.01)  # MB
+        self.max_size = config.get('max_size', 1)  # MB
 
         client_conf = config.get('client', {})
-        self.min_size = client_conf.get('min_size', 0.01)  # MB
-        self.max_size = client_conf.get('max_size', 1)  # MB
         self.delay = client_conf.get('delay', 1.0)
         self.ttl = client_conf.get('ttl', 300)
 
@@ -71,13 +71,13 @@ class Monitor(FileSystemEventHandler):
             raise ValueError(
                 "Configuration item 'monitor.client.ttl' must be positive")
 
-        # 缓存和锁
-        self.uploaded_cache = {}  # 已上传文件缓存 {filepath: (md5_hash, timestamp)}
-        self.cache_lock = threading.Lock()  # 用于控制缓存的互斥锁
-
         # 用于跟踪文件上传任务的定时器
         self.file_timers = {}  # 文件延迟上传定时器
         self.timer_lock = threading.Lock()  # 用于控制定时器的互斥锁
+
+        # 用于跟踪最近上传的文件哈希值，防止重复上传
+        self.recent_uploads = {}  # {filepath: (hash, timestamp)}
+        self.hash_lock = threading.Lock()  # 用于控制哈希表的互斥锁
 
         self.url = url = 'http://{}:{}/{}'.format(host, port, rule)
         self.logger.info("File will be uploaded to '{}'".format(url))
@@ -123,7 +123,7 @@ class Monitor(FileSystemEventHandler):
         try:
             filesize = os.path.getsize(file)
         except OSError as e:
-            self.logger.debug("Could not get size of file '{}': {}".format(
+            self.logger.error("Could not get size of file '{}': {}".format(
                 filename, e))
             return False
 
@@ -196,6 +196,7 @@ class Monitor(FileSystemEventHandler):
             self._cleanup_timer(filepath)
             return
 
+        # 计算文件哈希值
         try:
             with open(filepath, 'rb') as f:
                 file_hash = hashlib.md5(f.read()).hexdigest()
@@ -206,57 +207,59 @@ class Monitor(FileSystemEventHandler):
             return
 
         now = time.time()
-        with self.cache_lock:
-            # 清理过期缓存
-            to_remove = [
-                fp for fp, (_, ts) in self.uploaded_cache.items()
+
+        # 检查是否已上传相同内容
+        with self.hash_lock:
+            # 清理过期条目
+            expired_paths = [
+                fp for fp, (_, ts) in self.recent_uploads.items()
                 if now - ts > self.ttl
             ]
-            for fp in to_remove:
-                del self.uploaded_cache[fp]
+            for fp in expired_paths:
+                del self.recent_uploads[fp]
 
             # 检查是否已上传相同内容
-            if filepath in self.uploaded_cache:
-                cached_hash, _ = self.uploaded_cache[filepath]
+            if filepath in self.recent_uploads:
+                cached_hash, _ = self.recent_uploads[filepath]
                 if cached_hash == file_hash:
-                    self.logger.debug(
+                    self.logger.info(
                         "File '{}' has not been modified, skip".format(
                             filename))
                     self._cleanup_timer(filepath)
                     return
 
-            # 执行上传
+        # 执行上传
+        try:
+            # 根据文件扩展名确定 MIME 类型
+            mime_type, _ = mimetypes.guess_type(filepath)
+            if mime_type is None:
+                mime_type = 'application/octet-stream'
+
+            with open(filepath, 'rb') as f:
+                files = {'file': (filename, f, mime_type)}
+                resp = requests.post(self.url, files=files, timeout=10)
+
+            status = resp.status_code
             try:
-                # 根据文件扩展名确定 MIME 类型
-                mime_type, _ = mimetypes.guess_type(filepath)
-                if mime_type is None:
-                    mime_type = 'application/octet-stream'
+                text = json.loads(resp.text)
+            except json.JSONDecodeError:
+                text = {'error': 'Invalid JSON response'}
 
-                with open(filepath, 'rb') as f:
-                    files = {'file': (filename, f, mime_type)}
-                    resp = requests.post(self.url, files=files, timeout=10)
+            if status == 200:
+                self.logger.info("File '{}' uploaded success".format(filename))
 
-                status = resp.status_code
-                try:
-                    text = json.loads(resp.text)
-                except json.JSONDecodeError:
-                    text = {'error': 'Invalid JSON response'}
-
-                if status == 200:
-                    self.logger.info(
-                        "File '{}' uploaded success".format(filename))
-                    self.uploaded_cache[filepath] = (file_hash, now)
-                else:
-                    self.logger.error(
-                        "File '{}' uploaded failed: {} - {}".format(
-                            filename, status, text.get('error',
-                                                       'Unknown error')))
-            except requests.exceptions.RequestException as e:
-                self.logger.error("File '{}' upload request failed: {}".format(
-                    filename, e))
-            except Exception as e:
-                self.logger.error("File '{}' uploaded exception: {}".format(
-                    filename, e))
+                # 记录上传的哈希值
+                with self.hash_lock:
+                    self.recent_uploads[filepath] = (file_hash, now)
+            else:
+                self.logger.error("File '{}' uploaded failed: {} - {}".format(
+                    filename, status, text.get('error', 'Unknown error')))
+        except requests.exceptions.RequestException as e:
+            self.logger.error("File '{}' upload request failed: {}".format(
+                filename, e))
+        except Exception as e:
+            self.logger.error("File '{}' uploaded exception: {}".format(
+                filename, e))
 
         self._cleanup_timer(filepath)
 
