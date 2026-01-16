@@ -1,6 +1,6 @@
 [app]
 name = 'Change Monitor' # 程序名
-version = 'v0.0.1'      # 程序版本
+version = 'v0.0.2'      # 程序版本
 
 [monitor]
 host = '127.0.0.1' # 服务监听地址
