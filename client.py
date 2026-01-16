@@ -77,8 +77,20 @@ class Monitor(FileSystemEventHandler):
     def _check_file(self, event):
         """文件校验"""
         file = event.src_path
-        filesize = os.path.getsize(file)
         filename = os.path.basename(file)
+
+        # 检查文件是否存在（防止文件新建时的临时文件干扰）
+        if not os.path.exists(file):
+            self.logger.debug(
+                "File '{}' does not exist, skip".format(filename))
+            return False
+
+        try:
+            filesize = os.path.getsize(file)
+        except OSError as e:
+            self.logger.debug("Could not get size of file '{}': {}".format(
+                filename, e))
+            return False
 
         min_size = self.min_size * 1024 * 1024
         max_size = self.max_size * 1024 * 1024
@@ -116,7 +128,8 @@ class Monitor(FileSystemEventHandler):
                 "The file '{}' to be uploaded does not exist".format(filename))
             return
 
-        time.sleep(self.delay)  # 防抖
+        # 防抖：防止 1 on_created + 2 on_modified 事件导致的同一文件多次上传
+        time.sleep(self.delay)
 
         try:
             with open(filepath, 'rb') as f:
