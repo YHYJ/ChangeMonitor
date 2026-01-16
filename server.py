@@ -71,11 +71,11 @@ def upload_file():
         file = request.files['file']
         filename = file.filename
         if filename == '' or None:
-            return jsonify({"error": "No selected file"}), 400
+            return jsonify({"error": "No file uploaded"}), 400
 
         if filename:
-            ext = secure_filename(filename).rsplit(
-                '.', 1)[-1].lower() if '.' in filename else 'unknown'
+            suffix = Path(secure_filename(filename)).suffix
+            ext = suffix if suffix else 'unknown'
 
             if not allowed_file(filename):
                 return jsonify(

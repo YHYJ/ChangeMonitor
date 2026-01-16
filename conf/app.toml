@@ -6,12 +6,11 @@ version = 'v0.0.1'      # 程序版本
 host = '127.0.0.1' # 服务监听地址
 port = 1500        # 服务监听端口
 rule = '/upload'   # 文件接收地址
+allowed = ['.txt'] # 允许上传的文件类型
 [monitor.server]
 path = 'uploads' # 上传文件保存路径
-allow = ['xml']  # 允许上传的文件类型
 [monitor.client]
 watch = 'cache'   # 监控目标路径
-allow = '.xml'    # 监控目标类型
 recursive = false # 是否递归
 min_size = 0.01   # 允许上传文件的最小 MB
 max_size = 10     # 允许上传文件的最大 MB

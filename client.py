@@ -45,53 +45,67 @@ class Monitor(FileSystemEventHandler):
         host = config.get('host', '127.0.0.1')
         port = config.get('port', 1500)
         rule = config.get('rule', '/upload')
-        self.url = url = 'http://{}:{}/{}'.format(host, port, rule)
-        self.logger.info("Upload URL '{}'".format(url))
+        self.allowed = config.get('allowed', [])
 
         client_conf = config.get('client', {})
-        self.allow = client_conf.get('allow', '.txt')
         self.min_size = client_conf.get('min_size', 0.01)  # MB
         self.max_size = client_conf.get('max_size', 1)  # MB
         self.delay = client_conf.get('delay', 1.0)
         self.ttl = client_conf.get('ttl', 300)
 
+        self.url = url = 'http://{}:{}/{}'.format(host, port, rule)
+        self.logger.info("Upload to '{}'".format(url))
+
     def on_created(self, event):
         """文件创建回调函数"""
-        allowed = self._check_file(event)
-        if not event.is_directory and allowed:
-            filename = os.path.basename(event.src_path)
-            self.logger.info("Add file '{}'".format(filename))
-            self._upload_file(event.src_path)
+        if not event.is_directory:
+            allowed = self._check_file(event)
+            if allowed:
+                filename = os.path.basename(event.src_path)
+                self.logger.info("Add file '{}'".format(filename))
+                self._upload_file(event.src_path)
 
     def on_modified(self, event):
         """文件修改回调函数"""
-        allowed = self._check_file(event)
-        if not event.is_directory and allowed:
-            filename = os.path.basename(event.src_path)
-            self.logger.info("Update file '{}'".format(filename))
-            self._upload_file(event.src_path)
+        if not event.is_directory:
+            allowed = self._check_file(event)
+            if allowed:
+                filename = os.path.basename(event.src_path)
+                self.logger.info("Update file '{}'".format(filename))
+                self._upload_file(event.src_path)
 
     def _check_file(self, event):
         """文件校验"""
-        src = event.src_path.lower()
-        filesize = os.path.getsize(event.src_path)
+        file = event.src_path
+        filesize = os.path.getsize(file)
+        filename = os.path.basename(file)
 
         min_size = self.min_size * 1024 * 1024
         max_size = self.max_size * 1024 * 1024
 
-        target = src.endswith(self.allow) if isinstance(
-            src, str) else src.endswith(self.allow.encode())
+        ext = Path(file).suffix
+
+        if isinstance(self.allowed, str):
+            target = ext.lower() == self.allowed
+        elif isinstance(self.allowed, list):
+            target = ext.lower() in self.allowed
+        else:
+            self.logger.warning(
+                "Invalid configuration item: '{}'".format('monitor.allowed'))
+            return False
+
         if target:
             if min_size <= filesize <= max_size:
                 return True
             else:
-                self.logger.info(
-                    "File '{}' size '{}' is not allowed [{}, {}] (MB), skip".
-                    format(os.path.basename(event.src_path), filesize,
-                           self.min_size, self.max_size))
+                self.logger.warning(
+                    "File '{}' size '{}' exceeds the limit of [{}, {}] (MB), skip"
+                    .format(filename, filesize, self.min_size, self.max_size))
                 return False
-
-        return False
+        else:
+            self.logger.info("File '{}' type '{}' not allowed".format(
+                filename, ext))
+            return False
 
     def _upload_file(self, filepath):
         """上传文件"""
