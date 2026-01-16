@@ -20,6 +20,14 @@ host='127.0.0.1'
 port=1500
 timeout=60
 name='server'
-gunicorn='/usr/local/python3.11.0/bin/gunicorn'
+
+if command -v gunicorn &>/dev/null; then
+  gunicorn=gunicorn
+elif command -v /usr/local/python3.11.0/bin/gunicorn &>/dev/null; then
+  gunicorn='/usr/local/python3.11.0/bin/gunicorn'
+else
+  echo -e "\033[31m需要先安装 gunicorn\033[0m"
+  exit
+fi
 
 $gunicorn -w $workers -b $host:$port --timeout $timeout $name:app
