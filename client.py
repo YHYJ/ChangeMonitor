@@ -44,7 +44,7 @@ class Monitor(FileSystemEventHandler):
         rule = config.get('rule', '/upload')
         self.allowed = config.get('allowed', [])
         self.min_size = config.get('min_size', 0.01)  # MB
-        self.max_size = config.get('max_size', 1)  # MB
+        self.max_size = config.get('max_size', 16)  # MB
 
         client_conf = config.get('client', {})
         self.delay = client_conf.get('delay', 1.0)
