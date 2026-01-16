@@ -36,10 +36,10 @@ monitor_conf = config.get('monitor', {})
 host = monitor_conf.get('host', '127.0.0.1')
 port = monitor_conf.get('port', 1500)
 rule = monitor_conf.get('rule', '/upload')
+allowed = monitor_conf.get('allowed', [])
 
 server_conf = monitor_conf.get('server', {})
 path = server_conf.get('path', 'uploads')
-allow = server_conf.get('allow', [])
 
 # 配置
 upload_folder = Path(path).resolve()
@@ -58,10 +58,6 @@ heartbeat_thread = threading.Thread(target=heartbeat.start, daemon=True)
 heartbeat_thread.start()
 
 
-def allowed_file(filename: str) -> bool:
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in allow
-
-
 @app.route(rule, methods=['POST'])
 def upload_file():
     try:
@@ -71,18 +67,26 @@ def upload_file():
         file = request.files['file']
         filename = file.filename
         if filename == '' or None:
-            return jsonify({"error": "No file uploaded"}), 400
+            return jsonify({"error": "No file uploaded"}), 404
 
         if filename:
             suffix = Path(secure_filename(filename)).suffix
             ext = suffix if suffix else 'unknown'
 
-            if not allowed_file(filename):
+            if isinstance(allowed, str):
+                target = ext.lower() == allowed
+            elif isinstance(allowed, list):
+                target = ext.lower() in allowed
+            else:
+                return jsonify("Invalid configuration item: '{}'".format(
+                    'monitor.allowed')), 600
+
+            if not target:
                 return jsonify(
-                    {"error": "File type '{}' not allowed".format(ext)}), 400
+                    {"error": "File type '{}' not allowed".format(ext)}), 402
 
             # 安全文件名 + UUID 防冲突
-            unique_name = '{}.{}'.format(uuid.uuid4().hex, ext)
+            unique_name = '{}-{}'.format(uuid.uuid4().hex, filename)
             filepath = upload_folder / unique_name
 
             # 保存文件
